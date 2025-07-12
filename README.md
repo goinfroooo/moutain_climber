@@ -4,17 +4,19 @@ Une application 3D interactive créée avec Three.js où vous pouvez contrôler 
 
 ## 🎮 Contrôles
 
-- **W, A, S, D** - Se déplacer dans les directions correspondantes
+- **Z, Q, S, D** - Se déplacer dans les directions correspondantes (configuration française)
 - **ESPACE** - Sauter
 - **SOURIS** - Regarder autour de soi
 - **CLIC** - Activer le verrouillage du pointeur pour une meilleure expérience
 
 ## 🚀 Fonctionnalités
 
-- **Terrain procédural** : Montagnes générées algorithmiquement avec des pics et vallées
-- **Personnage animé** : Bonhomme 3D avec animation de marche
-- **Physique réaliste** : Gravité, collisions avec le terrain, saut
-- **Environnement riche** : Arbres, rochers, éclairage dynamique
+- **Montagnes 3D complètes** : Pics de montagne modélisés avec neige au sommet
+- **Terrain procédural** : Vallées et collines générées algorithmiquement
+- **Personnage animé** : Bonhomme 3D avec animation de marche et de bras
+- **Physique réaliste** : Gravité, collisions avec le terrain, saut amélioré
+- **Environnement riche** : Arbres, rochers, neige, nuages, éclairage dynamique
+- **Rendu graphique avancé** : Ombres, transparence, brouillard atmosphérique
 - **Interface utilisateur** : Affichage de la position et de la vitesse en temps réel
 - **Caméra intelligente** : Suit automatiquement le joueur avec des mouvements fluides
 
@@ -33,11 +35,13 @@ Une application 3D interactive créée avec Three.js où vous pouvez contrôler 
 
 ## 🎯 Fonctionnalités techniques
 
-- **Génération de terrain** : Utilisation de fonctions sinusoïdales pour créer des montagnes réalistes
+- **Modélisation 3D complète** : Pics de montagne avec géométrie de cône et neige
+- **Génération de terrain** : Utilisation de fonctions sinusoïdales pour créer des vallées et collines
 - **Système de physique** : Gravité, collision avec le terrain, détection de contact avec le sol
-- **Animation de personnage** : Mouvement des jambes pendant la marche
-- **Éclairage avancé** : Ombres dynamiques, lumière ambiante et directionnelle
-- **Optimisation** : Gestion efficace des ressources 3D
+- **Animation de personnage** : Mouvement des jambes et bras pendant la marche
+- **Rendu graphique avancé** : Ombres dynamiques, transparence, brouillard atmosphérique, tone mapping
+- **Éclairage multi-sources** : Lumière ambiante, directionnelle et de remplissage
+- **Optimisation** : Gestion efficace des ressources 3D avec placement intelligent des objets
 
 ## 🌟 Améliorations possibles
 
