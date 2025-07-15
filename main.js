@@ -5,17 +5,20 @@ class MountainExplorer {
         this.scene = null;
         this.camera = null;
         this.renderer = null;
-        this.player = null;
+        // this.player = null; // On n'a plus besoin du joueur 3D
         this.terrain = null;
         this.keys = {};
         this.mouse = { x: 0, y: 0 };
         this.playerVelocity = new THREE.Vector3();
         this.playerOnGround = false;
         this.clock = new THREE.Clock();
-        
+        this.yaw = 0; // Pour la rotation horizontale
+        this.pitch = 0; // Pour la rotation verticale
+        this.playerPosition = new THREE.Vector3(0, 5, 0); // Position du joueur (caméra)
+
         this.init();
         this.createTerrain();
-        this.createPlayer();
+        // this.createPlayer(); // On supprime le bonhomme
         this.createLighting();
         this.setupControls();
         this.animate();
@@ -48,45 +51,62 @@ class MountainExplorer {
         }, 1000);
     }
     
+    // --- Bruit simple type Perlin/Simplex pour relief naturel ---
+    noise2D(x, y) {
+        // Bruit pseudo-aléatoire lissé (simple, pour ne pas ajouter de dépendance)
+        let n = Math.sin(x * 12.9898 + y * 78.233) * 43758.5453;
+        return n - Math.floor(n);
+    }
+
     createTerrain() {
-        // Géométrie du terrain
-        const geometry = new THREE.PlaneGeometry(200, 200, 50, 50);
-        
-        // Déformer le terrain pour créer des montagnes
+        // Paramètres de la montagne
+        const size = 200;
+        const segments = 200;
+        const geometry = new THREE.PlaneGeometry(size, size, segments, segments);
         const vertices = geometry.attributes.position.array;
+        // Position du sommet de la montagne
+        const peakX = 0;
+        const peakZ = 40; // Devant la caméra
         for (let i = 0; i < vertices.length; i += 3) {
             const x = vertices[i];
             const z = vertices[i + 2];
-            
-            // Créer plusieurs pics de montagne
+            // Distance au sommet
+            const dist = Math.sqrt((x - peakX) ** 2 + (z - peakZ) ** 2);
+            // Forme générale : pic central, base large
             let height = 0;
-            height += Math.sin(x * 0.05) * Math.cos(z * 0.05) * 10;
-            height += Math.sin(x * 0.1) * Math.cos(z * 0.1) * 5;
-            height += Math.sin(x * 0.02) * Math.cos(z * 0.02) * 15;
-            
-            // Ajouter du bruit pour plus de réalisme
-            height += (Math.random() - 0.5) * 2;
-            
+            // Pic principal
+            height += Math.max(0, 60 - dist * 1.2);
+            // Relief secondaire (crêtes, plateaux)
+            height += Math.sin(x * 0.08) * 2 + Math.cos(z * 0.09) * 2;
+            height += Math.sin(x * 0.2 + z * 0.15) * 1.5;
+            // Bruit pour détails fins
+            height += (this.noise2D(x * 0.15, z * 0.15) - 0.5) * 6;
+            height += (this.noise2D(x * 0.5, z * 0.5) - 0.5) * 2;
+            // Plancher pour la plaine
+            if (dist > 80) height = Math.max(height, 0);
             vertices[i + 1] = height;
         }
-        
         geometry.computeVertexNormals();
-        
-        // Matériau du terrain
-        const material = new THREE.MeshLambertMaterial({
-            color: 0x3a5f3a,
-            side: THREE.DoubleSide
-        });
-        
+        // Dégradé de couleurs selon l'altitude
+        const colors = [];
+        for (let i = 0; i < vertices.length; i += 3) {
+            const y = vertices[i + 1];
+            let color;
+            if (y > 45) color = new THREE.Color(0xf8f8ff); // Neige
+            else if (y > 30) color = new THREE.Color(0x888888); // Roche
+            else if (y > 10) color = new THREE.Color(0x3a5f3a); // Herbe foncée
+            else color = new THREE.Color(0x7ec850); // Prairie
+            colors.push(color.r, color.g, color.b);
+        }
+        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        // Matériau avec vertex colors
+        const material = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
         this.terrain = new THREE.Mesh(geometry, material);
         this.terrain.rotation.x = -Math.PI / 2;
         this.terrain.receiveShadow = true;
         this.scene.add(this.terrain);
-        
-        // Ajouter des rochers
+        // Ajouter des rochers et arbres sur les flancs (optionnel, à améliorer ensuite)
         this.addRocks();
-        
-        // Ajouter des arbres
         this.addTrees();
     }
     
@@ -224,18 +244,17 @@ class MountainExplorer {
         document.addEventListener('keydown', (event) => {
             this.keys[event.code] = true;
         });
-        
         document.addEventListener('keyup', (event) => {
             this.keys[event.code] = false;
         });
-        
-        // Gestion de la souris
+        // Gestion de la souris (vue à la première personne)
         document.addEventListener('mousemove', (event) => {
-            this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            if (document.pointerLockElement === document.body) {
+                this.yaw -= event.movementX * 0.002;
+                this.pitch -= event.movementY * 0.002;
+                this.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.pitch));
+            }
         });
-        
-        // Pointer lock pour les contrôles de caméra
         document.addEventListener('click', () => {
             document.body.requestPointerLock();
         });
@@ -259,92 +278,54 @@ class MountainExplorer {
         const speed = 10;
         const jumpForce = 15;
         const gravity = -30;
-        
         // Mouvement horizontal
         const moveX = (this.keys['KeyA'] ? -1 : 0) + (this.keys['KeyD'] ? 1 : 0);
         const moveZ = (this.keys['KeyW'] ? -1 : 0) + (this.keys['KeyS'] ? 1 : 0);
-        
-        // Direction du mouvement basée sur l'orientation de la caméra
-        const cameraDirection = new THREE.Vector3();
-        this.camera.getWorldDirection(cameraDirection);
-        cameraDirection.y = 0;
-        cameraDirection.normalize();
-        
-        const rightVector = new THREE.Vector3();
-        rightVector.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
-        
+        // Calculer la direction à partir du yaw
+        const forward = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+        const right = new THREE.Vector3(Math.cos(this.yaw), 0, -Math.sin(this.yaw));
         const moveVector = new THREE.Vector3();
-        moveVector.addScaledVector(cameraDirection, -moveZ);
-        moveVector.addScaledVector(rightVector, moveX);
-        moveVector.normalize();
-        
+        moveVector.addScaledVector(forward, moveZ);
+        moveVector.addScaledVector(right, moveX);
+        if (moveVector.length() > 0) moveVector.normalize();
         this.playerVelocity.x = moveVector.x * speed;
         this.playerVelocity.z = moveVector.z * speed;
-        
         // Saut
         if (this.keys['Space'] && this.playerOnGround) {
             this.playerVelocity.y = jumpForce;
             this.playerOnGround = false;
         }
-        
         // Gravité
         this.playerVelocity.y += gravity * deltaTime;
-        
         // Appliquer le mouvement
-        this.player.position.x += this.playerVelocity.x * deltaTime;
-        this.player.position.y += this.playerVelocity.y * deltaTime;
-        this.player.position.z += this.playerVelocity.z * deltaTime;
-        
+        this.playerPosition.x += this.playerVelocity.x * deltaTime;
+        this.playerPosition.y += this.playerVelocity.y * deltaTime;
+        this.playerPosition.z += this.playerVelocity.z * deltaTime;
         // Collision avec le terrain
-        const terrainHeight = this.getTerrainHeight(this.player.position.x, this.player.position.z);
-        if (this.player.position.y <= terrainHeight + 1) {
-            this.player.position.y = terrainHeight + 1;
+        const terrainHeight = this.getTerrainHeight(this.playerPosition.x, this.playerPosition.z);
+        if (this.playerPosition.y <= terrainHeight + 1) {
+            this.playerPosition.y = terrainHeight + 1;
             this.playerVelocity.y = 0;
             this.playerOnGround = true;
         }
-        
-        // Rotation du personnage dans la direction du mouvement
-        if (moveX !== 0 || moveZ !== 0) {
-            const angle = Math.atan2(moveVector.x, moveVector.z);
-            this.player.rotation.y = angle;
-        }
-        
-        // Animation des jambes
-        const time = this.clock.getElapsedTime();
-        const legs = [this.player.children[4], this.player.children[5]];
-        legs.forEach((leg, index) => {
-            if (this.playerOnGround && (moveX !== 0 || moveZ !== 0)) {
-                leg.rotation.x = Math.sin(time * 10 + index * Math.PI) * 0.3;
-            } else {
-                leg.rotation.x = 0;
-            }
-        });
     }
     
     updateCamera() {
-        // Position de la caméra derrière le joueur
-        const cameraOffset = new THREE.Vector3(0, 3, 8);
-        const targetPosition = this.player.position.clone().add(cameraOffset);
-        
-        // Interpolation douce
-        this.camera.position.lerp(targetPosition, 0.1);
-        
-        // Regarder vers le joueur
-        this.camera.lookAt(this.player.position);
-        
-        // Rotation de la caméra avec la souris
-        this.camera.rotation.y += this.mouse.x * 0.01;
-        this.camera.rotation.x += this.mouse.y * 0.01;
-        
-        // Limiter la rotation verticale
-        this.camera.rotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.camera.rotation.x));
+        // La caméra prend la position du joueur
+        this.camera.position.copy(this.playerPosition).add(new THREE.Vector3(0, 1.0, 0));
+        // Calculer la direction de la caméra à partir du yaw et du pitch
+        const direction = new THREE.Vector3(
+            Math.sin(this.yaw) * Math.cos(this.pitch),
+            Math.sin(this.pitch),
+            Math.cos(this.yaw) * Math.cos(this.pitch)
+        );
+        this.camera.lookAt(this.camera.position.clone().add(direction));
     }
     
     updateUI() {
-        const position = this.player.position;
+        const position = this.playerPosition;
         document.getElementById('position').textContent = 
             `${Math.round(position.x)}, ${Math.round(position.y)}, ${Math.round(position.z)}`;
-        
         const speed = Math.sqrt(
             this.playerVelocity.x * this.playerVelocity.x + 
             this.playerVelocity.z * this.playerVelocity.z
@@ -369,7 +350,6 @@ class MountainExplorer {
         
         this.renderer.render(this.scene, this.camera);
     }
-}
-
+} // Fin de la classe
 // Démarrer l'application
 new MountainExplorer();
