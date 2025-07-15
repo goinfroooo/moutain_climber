@@ -107,7 +107,7 @@ class MountainExplorer {
         this.scene.add(this.terrain);
         // Ajouter des rochers et arbres sur les flancs (optionnel, à améliorer ensuite)
         this.addRocks();
-        this.addTrees();
+        this.addSkyDome(); // Ajout du ciel réaliste
     }
     
     addRocks() {
@@ -138,37 +138,41 @@ class MountainExplorer {
         }
     }
     
-    addTrees() {
-        const trunkGeometry = new THREE.CylinderGeometry(0.2, 0.3, 3);
-        const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-        
-        const leavesGeometry = new THREE.SphereGeometry(2, 8, 8);
-        const leavesMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-        
-        for (let i = 0; i < 30; i++) {
-            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-            const leaves = new THREE.Mesh(leavesGeometry, leavesMaterial);
-            
-            leaves.position.y = 2.5;
-            
-            const tree = new THREE.Group();
-            tree.add(trunk);
-            tree.add(leaves);
-            
-            tree.position.set(
-                (Math.random() - 0.5) * 180,
-                0,
-                (Math.random() - 0.5) * 180
-            );
-            
-            // Positionner sur le terrain
-            const height = this.getTerrainHeight(tree.position.x, tree.position.z);
-            tree.position.y = height;
-            
-            tree.castShadow = true;
-            tree.receiveShadow = true;
-            this.scene.add(tree);
-        }
+    addSkyDome() {
+        // SkyDome avec dégradé vertical
+        const geometry = new THREE.SphereGeometry(500, 32, 15);
+        // Shader material pour dégradé
+        const material = new THREE.ShaderMaterial({
+            side: THREE.BackSide,
+            uniforms: {
+                topColor: { value: new THREE.Color(0x4a90e2) }, // Bleu profond
+                bottomColor: { value: new THREE.Color(0xbbefff) }, // Bleu clair
+                offset: { value: 400 },
+                exponent: { value: 0.8 }
+            },
+            vertexShader: `
+                varying vec3 vWorldPosition;
+                void main() {
+                    vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                    vWorldPosition = worldPosition.xyz;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+            fragmentShader: `
+                uniform vec3 topColor;
+                uniform vec3 bottomColor;
+                uniform float offset;
+                uniform float exponent;
+                varying vec3 vWorldPosition;
+                void main() {
+                    float h = normalize(vWorldPosition + offset).y;
+                    float t = pow(max(h, 0.0), exponent);
+                    gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+                }
+            `
+        });
+        const sky = new THREE.Mesh(geometry, material);
+        this.scene.add(sky);
     }
     
     createPlayer() {
