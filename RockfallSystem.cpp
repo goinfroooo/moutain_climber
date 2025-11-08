@@ -19,7 +19,7 @@ void RockfallSystem::run() {
         // Probabilité d'un événement pendant dt
         double p = std::max(0.0, std::min(0.9, base_rate_hz * dt));
         if (uniform_dist(rng) < p) {
-            std::lock_guard<std::mutex> guard(state->lock);
+            std::lock_guard<std::mutex> guard(state->locker);
             state->rockfall_events_count++;
             auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()).count();

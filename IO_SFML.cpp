@@ -1,16 +1,16 @@
 #include "IO_SFML.h"
+#include "GameState.h"
 #include "Player.h"
 #include <iostream>
 #include <string>
 // #include <optional>  // Non nécessaire avec SFML 2.x
 
-
 // Constructeur Output_SFML
-Output_SFML::Output_SFML(std::vector<std::vector<std::string>> mountain) :
+Output_SFML::Output_SFML() :
     window(sf::VideoMode({static_cast<unsigned int>(win_size_x), static_cast<unsigned int>(win_size_y)}), "SFML Test - Touches Actives")
-    //i on initialise le texte avec une chaîne vide et la police
+    //on initialise le texte avec une chaîne vide et la police
     {
-    
+        window.setFramerateLimit(60);  // Augmenté à 60 FPS grâce aux optimisations
     // Chargement de la police système Windows
     if (!font.openFromFile("C:/Windows/Fonts/arial.ttf")) {
         std::cout << "Erreur: Impossible de charger la police arial.ttf" << std::endl;
@@ -27,69 +27,141 @@ Output_SFML::~Output_SFML() {
 }
 
 
-void Output_SFML::render_world(const std::vector<std::vector<std::string>>& mountain, const Player& player) {
-    // Initialiser le vecteur de formes de montagne
-    int height = mountain.size();
-    int width = height > 0 ? mountain[0].size() : 0;
-
-    if (DEBUG) 
-        std::cout << "moutain height : "<< height <<" width : "<<width<<std::endl;
-    
-    
-    // Redimensionner le vecteur de formes
-    mountainShapes.resize(height, std::vector<sf::RectangleShape>(width));
-    
-    // Calculer la taille des cellules pour s'adapter à la fenêtre
-    float cell_width = win_size_x / static_cast<float>(width);
-    float cell_height = win_size_y / static_cast<float>(height);
-    
-    // Créer les formes pour chaque cellule de la montagne
-    for (int row = 0; row < height; row++) {
-        for (int col = 0; col < width; col++) {
-            sf::RectangleShape& shape = mountainShapes[row][col];
-            
-            // Définir la taille de la cellule
-            shape.setSize(sf::Vector2f(cell_width, cell_height));
-            
-            // Positionner la cellule
-            shape.setPosition(sf::Vector2f(col * cell_width, row * cell_height));
-            
-            // Définir la couleur selon le type de terrain
-            if (mountain[row][col] == "|") {
-                // Sommet de montagne - couleur gris foncé
-                shape.setFillColor(sf::Color(100, 100, 100));
-            } else if (mountain[row][col] == "_") {
-                // Base de montagne - couleur gris clair
-                shape.setFillColor(sf::Color(150, 150, 150));
-            } else {
-                // Espace vide - couleur bleu ciel (ciel)
-                shape.setFillColor(sf::Color(0, 0, 0, 0));   // Transparent
-                shape.setOutlineThickness(0);                // pas de contour
-            }
-            
-            // Ajouter une bordure pour délimiter les cellules
-            shape.setOutlineThickness(0.9f);
-            shape.setOutlineColor(sf::Color(50, 50, 50));
+void Output_SFML::render_world(const GameState* state) {
+    try {
+        // Vérifier que le monde a été initialisé
+        if (!worldInitialized) {
+            std::cerr << "[ERREUR render_world] Le monde n'a pas été initialisé. Appeler update_world() d'abord." << std::endl;
+            return;
         }
-    }
 
-    // Ajout du joueur
-    sf::CircleShape playerShape(10.0f);
-    playerShape.setPosition(sf::Vector2f(static_cast<float>(player.get_x()), static_cast<float>(player.get_y())));
-    playerShape.setFillColor(sf::Color::Red);
+        // Ajout du joueur
+        const Player *player = state->get_player();
+        sf::CircleShape playerShape(10.0f);
+        playerShape.setPosition(sf::Vector2f(static_cast<float>(player->get_x()), static_cast<float>(player->get_y())));
+        playerShape.setFillColor(sf::Color::Red);
 
-    // Ajout du rendu initial : affichage du contenu de mountainShapes dans la fenêtre SFML
-    window.clear();
-    for (int row = 0; row < height; row++) {
-        for (int col = 0; col < width; col++) {
-            window.draw(mountainShapes[row][col]);
+        // Rendu optimisé : utiliser VertexArray au lieu de dessiner chaque RectangleShape
+        window.clear();
+        
+        // Dessiner la montagne avec VertexArray (beaucoup plus rapide)
+        if (mountainVertices.getVertexCount() > 0) {
+            window.draw(mountainVertices);
         }
+        
+        // Dessiner le joueur
+        window.draw(playerShape);
+        window.display();
+        
+    } catch (const std::exception& ex) {
+        std::cerr << "[ERREUR render_world] Exception attrapée : " << ex.what() << std::endl;
+        window.close();
+    } catch (...) {
+        std::cerr << "[ERREUR render_world] Exception inconnue attrapée !" << std::endl;
+        window.close();
     }
-    window.draw(playerShape);
-    window.display();
-    std::cout << "Montagne rendue: " << width << "x" << height << " cellules" << std::endl;
 }
 
+void Output_SFML::update_world (GameState* state) {
+    const std::vector<std::vector<std::string>> mountain = state->get_mountain();
+    int height = static_cast<int>(mountain.size());
+    int width = (height > 0 && !mountain[0].empty()) ? static_cast<int>(mountain[0].size()) : 0;
+
+    if (DEBUG) 
+        std::cout << "mountain height : "<< height <<" width : "<<width<<std::endl;
+
+    // Protection contre les tailles nulles
+    if (height == 0 || width == 0) {
+        std::cerr << "[ERREUR update_world] Matrice montagne vide (height=0 ou width=0)" << std::endl;
+        return;
+    }
+    
+    // Calculer la taille des cellules pour s'adapter à la fenêtre
+    cell_width = win_size_x / static_cast<float>(width);
+    cell_height = win_size_y / static_cast<float>(height);
+
+    // OPTIMISATION : Utiliser VertexArray au lieu de RectangleShape
+    // Cela permet de dessiner toutes les cellules en un seul appel, beaucoup plus rapide
+    mountainVertices.clear();
+    mountainVertices.setPrimitiveType(sf::PrimitiveType::Triangles);
+    
+    // Première passe : compter les cellules non-vides pour pré-allouer la mémoire
+    int nonEmptyCount = 0;
+    for (int row = 0; row < height; row++) {
+        for (int col = 0; col < width; col++) {
+            const std::string& cell = mountain[row][col];
+            if (cell == "|" || cell == "_") {
+                nonEmptyCount++;
+            }
+        }
+    }
+    
+    // Pré-allouer la mémoire (6 vertices par cellule = 2 triangles de 3 vertices chacun)
+    mountainVertices.resize(nonEmptyCount * 6);
+    
+    // Deuxième passe : remplir le VertexArray avec seulement les cellules non-vides
+    int vertexIndex = 0;
+    for (int row = 0; row < height; row++) {
+        float y = row * cell_height;
+        float y2 = y + cell_height;
+        
+        for (int col = 0; col < width; col++) {
+            const std::string& cell = mountain[row][col];
+            
+            // Skip les cellules vides (optimisation majeure)
+            if (cell != "|" && cell != "_") {
+                continue;
+            }
+            
+            // Déterminer la couleur selon le type de terrain
+            sf::Color cellColor = (cell == "|") 
+                ? sf::Color(100, 100, 100)  // Sommet - gris foncé
+                : sf::Color(150, 150, 150); // Base - gris clair
+            
+            // Calculer les positions des 4 coins de la cellule
+            float x = col * cell_width;
+            float x2 = x + cell_width;
+            
+            // Créer deux triangles pour former un rectangle
+            // Triangle 1: (x,y) -> (x2,y) -> (x,y2)
+            mountainVertices[vertexIndex].position = sf::Vector2f(x, y);
+            mountainVertices[vertexIndex].color = cellColor;
+            vertexIndex++;
+            
+            mountainVertices[vertexIndex].position = sf::Vector2f(x2, y);
+            mountainVertices[vertexIndex].color = cellColor;
+            vertexIndex++;
+            
+            mountainVertices[vertexIndex].position = sf::Vector2f(x, y2);
+            mountainVertices[vertexIndex].color = cellColor;
+            vertexIndex++;
+            
+            // Triangle 2: (x2,y) -> (x2,y2) -> (x,y2)
+            mountainVertices[vertexIndex].position = sf::Vector2f(x2, y);
+            mountainVertices[vertexIndex].color = cellColor;
+            vertexIndex++;
+            
+            mountainVertices[vertexIndex].position = sf::Vector2f(x2, y2);
+            mountainVertices[vertexIndex].color = cellColor;
+            vertexIndex++;
+            
+            mountainVertices[vertexIndex].position = sf::Vector2f(x, y2);
+            mountainVertices[vertexIndex].color = cellColor;
+            vertexIndex++;
+        }
+    }
+    
+    // NOTE: On ne crée plus les RectangleShape car ils ne sont plus utilisés
+    // Cela économise beaucoup de mémoire et de temps
+    
+    worldInitialized = true;
+    
+    if (DEBUG) {
+        std::cout << "[UPDATE_WORLD] " << width << "x" << height 
+                  << " cells, " << nonEmptyCount << " non-empty cells (" 
+                  << (nonEmptyCount * 100.0f / (width * height)) << "% de la matrice)" << std::endl;
+    }
+}
 /////////////////////////////////////////////
 /////////////////////////////////////////////
 /////////////////////////////////////////////
@@ -146,10 +218,10 @@ std::string Input_SFML::getKeyName(sf::Keyboard::Key key) {
         case sf::Keyboard::Key::Space: return "ESPACE";
         case sf::Keyboard::Key::Enter: return "ENTREE";
         case sf::Keyboard::Key::Escape: return "ECHAP";
-        case sf::Keyboard::Key::Left: return "FLECHE_GAUCHE";
-        case sf::Keyboard::Key::Right: return "FLECHE_DROITE";
-        case sf::Keyboard::Key::Up: return "FLECHE_HAUT";
-        case sf::Keyboard::Key::Down: return "FLECHE_BAS";
+        case sf::Keyboard::Key::Left: return "left";
+        case sf::Keyboard::Key::Right: return "right";
+        case sf::Keyboard::Key::Up: return "up";
+        case sf::Keyboard::Key::Down: return "down";
         case sf::Keyboard::Key::LShift: return "MAJ_GAUCHE";
         case sf::Keyboard::Key::RShift: return "MAJ_DROITE";
         case sf::Keyboard::Key::LControl: return "CTRL_GAUCHE";
@@ -164,9 +236,11 @@ int Input_SFML::check_input() {
     //while (output_sfml->getWindow().isOpen()) {
         // Gestion des événements
         while (const std::optional<sf::Event> event = output_sfml->getWindow().pollEvent()) {
-            if (event->is<sf::Event::Closed>()) {
-                output_sfml->getWindow().close();
-                g_stop_flag.store(true);
+            if (event.has_value()) {
+                if (event->is<sf::Event::Closed>()) {
+                    output_sfml->getWindow().close();
+                    g_stop_flag.store(true);
+                }
             }
         }
 
@@ -233,3 +307,5 @@ int Input_SFML::check_input() {
     
     return 0;
 }
+
+

@@ -13,20 +13,27 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-GameState::GameState() : player(nullptr) {
+GameState::GameState(Player* player, WindSystem* wind) {
+    this->player = player;
+    this->wind_system = wind;
     create_mountain();
+    
 }
 
 GameState::~GameState() {
     if (player) {
         delete player;
     }
+    if (wind_system) {
+        delete wind_system;
+    }
 }
 
 void GameState::print_state() {
-    std::lock_guard<std::mutex> guard(lock);
-    std::cout << "vent : " << std::fixed << std::setprecision(1) 
-              << wind_speed << " m/s @ " << wind_direction_deg << "degres | "<<std::endl;
+    
+    wind_system->print_state();
+    player->print_state();
+
               /*<< "rochers: " << rockfall_events_count << " évts | "
               << "player: (" << std::setprecision(2) << player_x << ", " << player_y << ")"
               << std::endl;*/
@@ -57,7 +64,7 @@ void GameState::create_mountain() {
         // Pour chaque colonne, déterminer la position du caractère montagne
         while (col < width) {
             std::string edge;
-            if ((surface_y <= 0 && col<center_x) || (surface_y >= height && col > center_x)) {
+            if ((surface_y <= 0 && col<center_x) || (surface_y >= height-1 && col > center_x)) {
                 edge = "_";
             } 
             else edge =  dist(gen) < 0.4 ? "_" : "|";
@@ -88,6 +95,7 @@ void GameState::create_mountain() {
                     surface_y += 1;
                 }
             }
+            col += 1; // PASSSSS SURRRRR A SUPPPPPPPPP
             // Affichage debug après modification
             if (DEBUG && (surface_y < 0 || surface_y >= height)) {
                 std::cerr << "[DEBUG MONTAGNE] surface_y invalide après modification: " << surface_y << std::endl;

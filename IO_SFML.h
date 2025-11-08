@@ -22,23 +22,29 @@ class Output_SFML {
         sf::Font font;
         sf::CircleShape shape;
         std::vector<std::vector<sf::RectangleShape>> mountainShapes;
+        
+        // Optimisation : VertexArray pour le rendu batché
+        sf::VertexArray mountainVertices;
+        bool worldInitialized = false;
+        float cell_width = 0.0f;
+        float cell_height = 0.0f;
 
     public:
-        Output_SFML(std::vector<std::vector<std::string>> mountain);
+        Output_SFML();
         ~Output_SFML();
         
         sf::RenderWindow& getWindow() { return window; }
         sf::CircleShape& getShape() { return shape; }
         sf::Font& getFont() { return font; }
         std::vector<std::vector<sf::RectangleShape>>& getMountainShapes() { return mountainShapes; }
-        void render_world(const std::vector<std::vector<std::string>>& mountain, const Player& player);
+        void render_world(const GameState* state);
+        void update_world(GameState *state);
 };
 
 class Input_SFML {
     private:
         Output_SFML* output_sfml;
         std::vector<std::string> pressedKeys;
-
         std::string getKeyName(sf::Keyboard::Key key);
         
     public: 
