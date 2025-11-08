@@ -13,7 +13,11 @@
 #define M_PI 3.14159265358979323846
 #endif
 
-GameState::GameState(Player* player, WindSystem* wind) {
+
+
+GameState::GameState(Player* player, WindSystem* wind, std::atomic<bool>* stop, double frequency) : 
+stop_flag(stop), tick_hz(frequency)
+{
     this->player = player;
     this->wind_system = wind;
     create_mountain();
@@ -67,7 +71,7 @@ void GameState::create_mountain() {
             if ((surface_y <= 0 && col<center_x) || (surface_y >= height-1 && col > center_x)) {
                 edge = "_";
             } 
-            else edge =  dist(gen) < 0.4 ? "_" : "|";
+            else edge =  dist(gen) < 0.5 ? "_" : "|";
             
             // Debug info avant écriture
             if (surface_y < 0 || surface_y >= height || col < 0 || col >= width) {
@@ -88,6 +92,10 @@ void GameState::create_mountain() {
                 }
             }
             else {
+                if (y_end == -1) {
+                    y_end = surface_y;
+                    x_end = center_x;
+                }
                 // On descend d'une case si | sinon on reste a la meme hauteur
                 if (edge == "_") {
                     // rien à faire
@@ -95,7 +103,7 @@ void GameState::create_mountain() {
                     surface_y += 1;
                 }
             }
-            col += 1; // PASSSSS SURRRRR A SUPPPPPPPPP
+            //col += 1; // PASSSSS SURRRRR A SUPPPPPPPPP
             // Affichage debug après modification
             if (DEBUG && (surface_y < 0 || surface_y >= height)) {
                 std::cerr << "[DEBUG MONTAGNE] surface_y invalide après modification: " << surface_y << std::endl;
@@ -108,8 +116,22 @@ void GameState::create_mountain() {
         std::cout<<"Done"<<std::endl;
 }
 
-std::vector<std::vector<std::string>> GameState::get_mountain () {
-    return this->mountain;
+void GameState::run () {
+    const auto tick_duration = std::chrono::duration<double>(1.0 / tick_hz);
+
+    while (!stop_flag->load()) {
+        
+        if(is_win()) {
+            std::cout<< "Felicitation ! vous etes un pure rock climber !"<<std::endl;
+            g_stop_flag.store(true);
+        }
+
+        std::this_thread::sleep_for(tick_duration);
+    }
+}
+
+bool GameState::is_win() {
+    return std::sqrt(std::pow(x_end - player->get_x(), 2) + std::pow(y_end - player->get_y(), 2))<end_zone_radius ? true : false;
 }
 
 void GameState::save_mountain_to_file(const std::string& filename) {

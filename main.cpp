@@ -37,8 +37,8 @@ int main() {
     WindSystem wind_system( &g_stop_flag, 5.0);
     Player player(&sfml_input, &wind_system, &g_stop_flag, 5.0);
     
-    GameState state (&player, &wind_system);
-    state.save_mountain_to_file("mountain_debug.txt");
+    GameState state (&player, &wind_system,  &g_stop_flag, 5.0);
+    if (DEBUG) state.save_mountain_to_file("mountain_debug.txt");
     sfml_output.update_world(&state);
 
     
@@ -49,6 +49,7 @@ int main() {
     std::vector<std::thread> threads;
     threads.emplace_back(&WindSystem::run, &wind_system);
     threads.emplace_back(&Player::run, &player);
+    threads.emplace_back(&GameState::run, &state);
     //threads.emplace_back(&RockfallSystem::run, &rockfall_system);
 
     

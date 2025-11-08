@@ -32,7 +32,7 @@ private:
     double player_height = 8.0; //m
     //Nb : pas giga coherent comme taille de personne mais bon on affinera plus tard
     double player_mass = 70; //kg
-    double wind_influence = 0.003; //coefficient d'influence du vent sur la vitesse du joueur
+    double wind_influence = 0.03; //coefficient d'influence du vent sur la vitesse du joueur
 
     double player_x = 0.0; //m      
     double player_y = 0.0; //mS

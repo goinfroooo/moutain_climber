@@ -26,40 +26,36 @@ double WindSystem::get_direction() const {
 
 void WindSystem::run() {
     const auto tick_duration = std::chrono::duration<double>(1.0 / tick_hz);
-    
+
     while (!stop_flag->load()) {
         {
             std::lock_guard<std::mutex> guard(locker);
-            // Dérive lente de la direction, variations modérées de la vitesse
+            // Direction varie plus vite et plus sur toute la plage
+            // On augmente la variance typique de la variation de direction
+            double direction_variation_factor = 12.0; // plus fort qu'avant (était 5.0)
+            double direction_delta = direction_noise(rng) * direction_variation_factor;
 
-            double stability = std::clamp(1.0 - wind_speed / 20.0, 0.1, 1.0);
-
-            // bruit directionnel : écart-type dépendant de la stabilité
-            double direction_delta = direction_noise(rng) * stability * 5.0; // 5° max typique
-
-            // on met à jour la direction et la remet entre 0 et 360
+            // Changement plus marqué, ainsi la direction couvre mieux tout le cercle
             wind_direction_deg = fmod(wind_direction_deg + direction_delta, 360.0);
             if (wind_direction_deg < 0) wind_direction_deg += 360.0;
 
-            double speed_delta = speed_noise(rng); // bruit normal standard
+            // Vitesse : variations plus larges
+            double speed_delta = speed_noise(rng) * 2.2; // booste les variations par rapport à avant
 
-            // Probabilité faible (1%) d'une rafale
-            if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.1) {
-                double gust = std::normal_distribution<double>(70.0, 8.0)(rng);
+            // Rafale plus fréquente et plus forte
+            if (std::uniform_real_distribution<double>(0.0, 1.0)(rng) < 0.15) {
+                double gust = std::normal_distribution<double>(90.0, 14.0)(rng);
                 speed_delta += gust;
-                //std::cout << "speed_delta: " << speed_delta << std::endl;
             }
 
-            // Lissage pour éviter les changements trop brutaux moyens
-            double inertia = 0.5; // 0.9 = très lissé, 0.0 = brutal
+            // Lissage plus faible (plus de "sauts" possibles)
+            double inertia = 0.35; // moins lissé qu'avant (0.5)
             wind_speed = inertia * wind_speed + (1.0 - inertia) * (wind_speed + speed_delta);
 
-            // On borne
-            wind_speed = std::clamp(wind_speed, 0.0, 20.0);
-
-        
+            // Borne de sécurité
+            wind_speed = std::clamp(wind_speed, 0.0, 22.0);
         }
-        
+
         std::this_thread::sleep_for(tick_duration);
     }
 }
